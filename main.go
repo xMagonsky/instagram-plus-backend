@@ -1,18 +1,128 @@
 package main
 
 import (
+	"context"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
+
+	"instagramplusbackend/auth"
 )
 
+type RegisterRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+type LoginRequest struct {
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+type TokenRequest struct {
+	Token string `json:"token" binding:"required"`
+}
+
 func main() {
+	if err := godotenv.Load(); err != nil {
+		println("Error loading .env file: ", err)
+	}
+
+	postgreClient, err := pgxpool.New(context.Background(), os.Getenv("DB_URL"))
+	if err != nil {
+		panic("failed to connect to database: " + err.Error())
+	}
+	defer postgreClient.Close()
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     os.Getenv("REDIS_ADDR"),
+		Password: os.Getenv("REDIS_PASSWORD"),
+		DB:       1,
+	})
+	defer redisClient.Close()
+
+	auth := auth.NewAuthModule(postgreClient, redisClient)
+
 	r := gin.Default()
 
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Hello, World!",
+			"message": "Hello, Backend!",
 		})
+	})
+
+	r.POST("/register", func(c *gin.Context) {
+		var req RegisterRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+
+		ctx := context.Background()
+		if _, err := auth.Register(ctx, req.Username, req.Password); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		//
+		// LOGIN!
+		//
+
+		c.JSON(http.StatusOK, gin.H{"message": "user registered successfully"})
+	})
+
+	r.POST("/login", func(c *gin.Context) {
+		var req LoginRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+
+		ctx := context.Background()
+		token, err := auth.Login(ctx, req.Username, req.Password)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"token": token})
+	})
+
+	r.POST("/validate", func(c *gin.Context) {
+		var req TokenRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+
+		ctx := context.Background()
+		userID, err := auth.ValidateToken(ctx, req.Token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"user_id": userID})
+	})
+
+	r.POST("/logout", func(c *gin.Context) {
+		var req TokenRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+
+		ctx := context.Background()
+		if err := auth.Logout(ctx, req.Token); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
 	})
 
 	r.Run(":5069")
