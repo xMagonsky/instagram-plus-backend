@@ -28,6 +28,12 @@ type TokenRequest struct {
 	Token string `json:"token" binding:"required"`
 }
 
+type AddPostRequest struct {
+	Author  string `json:"author" binding:"required"`
+	Image   string `json:"image" binding:"required"`
+	Content string `json:"content" binding:"required"`
+}
+
 func main() {
 	if err := godotenv.Load(); err != nil {
 		println("Error loading .env file: ", err)
@@ -55,8 +61,6 @@ func main() {
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"} // Allowed HTTP methods
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"} // Allowed headers
 	config.AllowCredentials = true                                            // Allow cookies or credentials if needed
-
-	// Apply CORS middleware
 	r.Use(cors.New(config))
 
 	r.GET("/", func(c *gin.Context) {
@@ -99,6 +103,7 @@ func main() {
 			return
 		}
 
+		println("Number of cookies: ", len(c.Request.Cookies()))
 		c.SetCookie("session_token", token, 3600, "/", "localhost:5173", false, true)
 
 		c.JSON(http.StatusOK, gin.H{"token": token})
@@ -135,6 +140,24 @@ func main() {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "logged out successfully"})
+	})
+
+	r.GET("/post/all", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"author":  "Test Author",
+			"image":   "https://picsum.photos/500",
+			"content": "Test content of a post.",
+		})
+	})
+
+	r.POST("/post", func(c *gin.Context) {
+		var req AddPostRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
 	r.Run(":5069")
