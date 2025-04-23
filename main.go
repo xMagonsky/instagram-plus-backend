@@ -163,7 +163,8 @@ func main() {
 		rows, err := postgreClient.Query(ctx, `
 			SELECT p.id, p.photo_url, p.description, p.create_time, p.creator_id, u.username 
 			FROM posts p
-			JOIN users u ON p.creator_id = u.id`)
+			JOIN users u ON p.creator_id = u.id
+			ORDER BY p.create_time DESC`)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 			return
