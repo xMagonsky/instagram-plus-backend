@@ -143,10 +143,17 @@ func main() {
 	})
 
 	r.GET("/post/all", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"author":  "Test Author",
-			"image":   "https://picsum.photos/500",
-			"content": "Test content of a post.",
+		c.JSON(http.StatusOK, []gin.H{
+			{
+				"author":  "Test Author1",
+				"image":   "https://picsum.photos/500",
+				"content": "Test content of a post.2",
+			},
+			{
+				"author":  "Test Author2",
+				"image":   "https://picsum.photos/500",
+				"content": "Test content of a post.2",
+			},
 		})
 	})
 
