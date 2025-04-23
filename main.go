@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -34,6 +35,15 @@ type AddPostRequest struct {
 	Content string `json:"content" binding:"required"`
 }
 
+type Post struct { // to change
+	ID          int    `json:"id"`
+	PhotoURL    string `json:"image"`
+	Description string `json:"content"`
+	CreateTime  string `json:"create_time"`
+	CreatorID   string `json:"creator_id"`
+	Author      string `json:"author"`
+}
+
 func main() {
 	if err := godotenv.Load(); err != nil {
 		println("Error loading .env file: ", err)
@@ -48,7 +58,13 @@ func main() {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     os.Getenv("REDIS_ADDR"),
 		Password: os.Getenv("REDIS_PASSWORD"),
-		DB:       1,
+		DB: func() int {
+			db, err := strconv.Atoi(os.Getenv("REDIS_DB"))
+			if err != nil {
+				panic("invalid REDIS_DB value: " + err.Error())
+			}
+			return db
+		}(),
 	})
 	defer redisClient.Close()
 
@@ -104,7 +120,7 @@ func main() {
 		}
 
 		println("Number of cookies: ", len(c.Request.Cookies()))
-		c.SetCookie("session_token", token, 3600, "/", "localhost:5173", false, true)
+		c.SetCookie("session_token", token, 3600, "/", "localhost", false, true)
 
 		c.JSON(http.StatusOK, gin.H{"token": token})
 	})
@@ -143,24 +159,44 @@ func main() {
 	})
 
 	r.GET("/post/all", func(c *gin.Context) {
-		c.JSON(http.StatusOK, []gin.H{
-			{
-				"author":  "Test Author1",
-				"image":   "https://picsum.photos/500",
-				"content": "Test content of a post.2",
-			},
-			{
-				"author":  "Test Author2",
-				"image":   "https://picsum.photos/500",
-				"content": "Test content of a post.2",
-			},
-		})
+		ctx := context.Background()
+		rows, err := postgreClient.Query(ctx, `
+			SELECT p.id, p.photo_url, p.description, p.create_time, p.creator_id, u.username 
+			FROM posts p
+			JOIN users u ON p.creator_id = u.id`)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+		defer rows.Close()
+
+		var posts []Post
+		for rows.Next() {
+			var post Post
+			err := rows.Scan(&post.ID, &post.PhotoURL, &post.Description, &post.CreateTime, &post.CreatorID, &post.Author)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+				return
+			}
+			posts = append(posts, post)
+		}
+
+		c.JSON(http.StatusOK, posts)
 	})
 
 	r.POST("/post", func(c *gin.Context) {
 		var req AddPostRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+
+		ctx := context.Background()
+		_, err := postgreClient.Exec(ctx,
+			"INSERT INTO posts (photo_url, description, creator_id) VALUES ($1, $2, $3)",
+			req.Image, req.Content, 3)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 			return
 		}
 
