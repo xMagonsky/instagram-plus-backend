@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
@@ -49,6 +50,15 @@ func main() {
 
 	r := gin.Default()
 
+	config := cors.DefaultConfig()
+	config.AllowOrigins = []string{"http://localhost:5173"}                   // Allow frontend origin
+	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"} // Allowed HTTP methods
+	config.AllowHeaders = []string{"Origin", "Content-Type", "Authorization"} // Allowed headers
+	config.AllowCredentials = true                                            // Allow cookies or credentials if needed
+
+	// Apply CORS middleware
+	r.Use(cors.New(config))
+
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Hello, Backend!",
@@ -88,6 +98,8 @@ func main() {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			return
 		}
+
+		c.SetCookie("session_token", token, 3600, "/", "localhost:5173", false, true)
 
 		c.JSON(http.StatusOK, gin.H{"token": token})
 	})
