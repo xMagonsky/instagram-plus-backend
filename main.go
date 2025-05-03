@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -13,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"instagramplusbackend/auth"
+	"instagramplusbackend/utils"
 )
 
 type RegisterRequest struct {
@@ -36,12 +38,12 @@ type AddPostRequest struct {
 }
 
 type Post struct { // to change
-	ID          int    `json:"id"`
-	PhotoURL    string `json:"image"`
-	Description string `json:"content"`
-	CreateTime  string `json:"create_time"`
-	CreatorID   string `json:"creator_id"`
-	Author      string `json:"author"`
+	ID              int       `json:"id"`
+	PhotoURL        string    `json:"image"`
+	Description     string    `json:"content"`
+	CreateTimestamp time.Time `json:"create_timestamp"`
+	CreatorID       string    `json:"creator_id"`
+	Author          string    `json:"author"`
 }
 
 func main() {
@@ -161,20 +163,19 @@ func main() {
 	r.GET("/post/all", func(c *gin.Context) {
 		ctx := context.Background()
 		rows, err := postgreClient.Query(ctx, `
-			SELECT p.id, p.photo_url, p.description, p.create_time, p.creator_id, u.username 
+			SELECT p.id, p.photo_url, p.description, p.create_timestamp, p.creator_id, u.username 
 			FROM posts p
 			JOIN users u ON p.creator_id = u.id
-			ORDER BY p.create_time DESC`)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			ORDER BY p.create_timestamp ASC`)
+		if utils.HandleError(c, err, "database error") {
 			return
 		}
 		defer rows.Close()
 
-		var posts []Post
+		posts := []Post{}
 		for rows.Next() {
 			var post Post
-			err := rows.Scan(&post.ID, &post.PhotoURL, &post.Description, &post.CreateTime, &post.CreatorID, &post.Author)
+			err := rows.Scan(&post.ID, &post.PhotoURL, &post.Description, &post.CreateTimestamp, &post.CreatorID, &post.Author)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 				return
