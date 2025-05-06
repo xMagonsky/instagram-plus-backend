@@ -24,7 +24,16 @@ func NewAuthModule(db *pgxpool.Pool, redis *redis.Client) *AuthModule {
 	}
 }
 
-func (a *AuthModule) Register(ctx context.Context, username, password string) (string, error) {
+func generateSecureToken(length int) (string, error) {
+	randomBytes := make([]byte, length)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", err
+	}
+
+	return base64.URLEncoding.EncodeToString(randomBytes), nil
+}
+
+func (a *AuthModule) Register(ctx context.Context, username, password string, email string) (string, error) {
 	var exists bool
 	err := a.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)", username).Scan(&exists)
 	if err != nil {
@@ -39,33 +48,32 @@ func (a *AuthModule) Register(ctx context.Context, username, password string) (s
 		return "", err
 	}
 
-	_, err = a.db.Exec(ctx, "INSERT INTO users (username, password, email) VALUES ($1, $2, 'testing')", username, string(hashedPassword))
+	var userID int
+	err = a.db.QueryRow(ctx,
+		"INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id",
+		username, string(hashedPassword), email,
+	).Scan(&userID)
 	if err != nil {
 		return "", err
 	}
 
-	return "", nil
-}
-
-func generateSecureToken(length int) (string, error) {
-	randomBytes := make([]byte, length)
-	if _, err := rand.Read(randomBytes); err != nil {
+	token, err := generateSecureToken(32)
+	if err != nil {
 		return "", err
 	}
 
-	return base64.URLEncoding.EncodeToString(randomBytes), nil
+	key := "session:" + token
+	err = a.redis.Set(ctx, key, userID, 24*time.Hour).Err()
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
 }
 
-// func signToken(token, secretKey string) string {
-// 	h := hmac.New(sha256.New, []byte(secretKey))
-// 	h.Write([]byte(token))
-// 	signature := h.Sum(nil)
-
-// 	return base64.URLEncoding.EncodeToString(signature)
-// }
-
 func (a *AuthModule) Login(ctx context.Context, username, password string) (string, error) {
-	var userID, passwordHash string
+	var userID int
+	var passwordHash string
 	err := a.db.QueryRow(ctx, "SELECT id, password FROM users WHERE username = $1", username).Scan(&userID, &passwordHash)
 	if err != nil {
 		return "", errors.New("invalid credentials")
@@ -104,3 +112,14 @@ func (a *AuthModule) Logout(ctx context.Context, token string) error {
 	key := "session:" + token
 	return a.redis.Del(ctx, key).Err()
 }
+
+//
+// TOKEN SIGNING FOR HASHED TOKENS IN REDIS
+//
+// func signToken(token, secretKey string) string {
+// 	h := hmac.New(sha256.New, []byte(secretKey))
+// 	h.Write([]byte(token))
+// 	signature := h.Sum(nil)
+
+// 	return base64.URLEncoding.EncodeToString(signature)
+// }
