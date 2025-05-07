@@ -2,17 +2,20 @@ package models
 
 import "time"
 
-type AddPostRequest struct {
-	Author  string `json:"author" binding:"required"`
-	Image   string `json:"image" binding:"required"`
-	Content string `json:"content" binding:"required"`
+type Post struct {
+	ID                int       `json:"id"`
+	AuthorID          string    `json:"author_id"`
+	ImageURL          string    `json:"image_url"`
+	Description       string    `json:"description"`
+	CreationTimestamp time.Time `json:"create_timestamp"`
+	AuthorName        string    `json:"author_name"`
 }
 
-type Post struct { // to change
-	ID              int       `json:"id"`
-	PhotoURL        string    `json:"image"`
-	Description     string    `json:"content"`
-	CreateTimestamp time.Time `json:"create_timestamp"`
-	CreatorID       string    `json:"creator_id"`
-	Author          string    `json:"author"`
+type AddPostRequest struct {
+	ImageURL    string `json:"image_url" binding:"required"`
+	Description string `json:"description" binding:"required"`
+}
+
+type UpdatePostRequest struct {
+	Description string `json:"description" binding:"required"`
 }

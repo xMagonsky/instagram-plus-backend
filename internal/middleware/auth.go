@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"instagramplusbackend/internal/utils"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,13 +16,20 @@ func (m *MiddlewareManager) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		userID, err := m.auth.ValidateToken(c.Request.Context(), token)
+		var userID string
+		userID, err = m.auth.ValidateToken(c.Request.Context(), token)
 		if err != nil {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
 
-		c.Set("userID", userID)
+		userIDInt, err := strconv.Atoi(userID)
+		if err != nil {
+			utils.LogError(c, err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		c.Set("user_id", userIDInt)
 
 		c.Next()
 	}
