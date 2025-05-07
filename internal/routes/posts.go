@@ -1,18 +1,19 @@
 package routes
 
 import (
-	"context"
+	"net/http"
+
 	"instagramplusbackend/internal/models"
 	"instagramplusbackend/internal/utils"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 	postRouter := router.Group("/posts")
+	postRouter.Use(r.middleware.RequireAuth())
 	{
-		postRouter.GET("/post/all", func(c *gin.Context) {
+		postRouter.GET("/all", func(c *gin.Context) {
 			rows, err := r.pgClient.Query(c.Request.Context(), `
 				SELECT p.id, p.photo_url, p.description, p.create_timestamp, p.creator_id, u.username
 				FROM posts p
@@ -37,15 +38,14 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, posts)
 		})
 
-		postRouter.POST("/post", func(c *gin.Context) {
+		postRouter.POST("/", func(c *gin.Context) {
 			var req models.AddPostRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 				return
 			}
 
-			ctx := context.Background()
-			_, err := r.pgClient.Exec(ctx,
+			_, err := r.pgClient.Exec(c.Request.Context(),
 				"INSERT INTO posts (photo_url, description, creator_id) VALUES ($1, $2, $3)",
 				req.Image, req.Content, 3)
 			if err != nil {

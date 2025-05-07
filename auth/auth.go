@@ -105,6 +105,20 @@ func (a *AuthModule) ValidateToken(ctx context.Context, token string) (string, e
 	} else if err != nil {
 		return "", err
 	}
+
+	// Check the expiration time of the token
+	ttl, err := a.redis.TTL(ctx, key).Result()
+	if err != nil && err != redis.Nil {
+		return "", err
+	}
+
+	// Update expiration only after some time
+	if ttl < 20*time.Hour {
+		err = a.redis.Expire(ctx, key, 24*time.Hour).Err()
+		if err != nil {
+			return "", err
+		}
+	}
 	return userID, nil
 }
 
