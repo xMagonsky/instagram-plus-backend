@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"instagramplusbackend/internal/models"
+	"instagramplusbackend/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,13 +15,24 @@ func (r *RoutesManager) RegisterAuthRoutes(router *gin.Engine) {
 		authRouter.POST("/register", func(c *gin.Context) {
 			var req models.RegisterRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
+				println(err.Error())
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 				return
 			}
 
-			token, err := r.auth.Register(c.Request.Context(), req.Username, req.Password, req.Email)
+			userID, token, err := r.auth.Register(c.Request.Context(), req.Username, req.Password, req.Email)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			_, err = r.pgClient.Exec(c.Request.Context(), `
+				INSERT INTO user_profiles (user_id, name, surname, description, profile_image_url, gender, birth)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				userID, req.Name, req.Surname, req.Description, req.ProfileImage, req.Gender, req.BirthDate)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user profile"})
 				return
 			}
 
@@ -64,16 +76,18 @@ func (r *RoutesManager) RegisterAuthRoutes(router *gin.Engine) {
 		})
 
 		authRouter.POST("/logout", func(c *gin.Context) {
-			var req models.TokenRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			token, err := c.Cookie("AUTH")
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "not logged in"})
 				return
 			}
 
-			if err := r.auth.Logout(c.Request.Context(), req.Token); err != nil {
+			if err := r.auth.Logout(c.Request.Context(), token); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+
+			c.SetCookie("AUTH", "", -1, "/", "", false, true)
 
 			c.JSON(http.StatusOK, gin.H{})
 		})

@@ -33,19 +33,19 @@ func generateSecureToken(length int) (string, error) {
 	return base64.URLEncoding.EncodeToString(randomBytes), nil
 }
 
-func (a *AuthModule) Register(ctx context.Context, username, password string, email string) (string, error) {
+func (a *AuthModule) Register(ctx context.Context, username, password string, email string) (int, string, error) {
 	var exists bool
 	err := a.db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)", username).Scan(&exists)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 	if exists {
-		return "", errors.New("username already exists")
+		return 0, "", errors.New("username already exists")
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 
 	var userID int
@@ -54,21 +54,21 @@ func (a *AuthModule) Register(ctx context.Context, username, password string, em
 		username, string(hashedPassword), email,
 	).Scan(&userID)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 
 	token, err := generateSecureToken(32)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 
 	key := "session:" + token
 	err = a.redis.Set(ctx, key, userID, 24*time.Hour).Err()
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 
-	return token, nil
+	return userID, token, nil
 }
 
 func (a *AuthModule) Login(ctx context.Context, username, password string) (string, error) {

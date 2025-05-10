@@ -7,6 +7,7 @@ import (
 	"instagramplusbackend/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
@@ -61,8 +62,8 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, gin.H{})
 		})
 
-		postRouter.GET("/:id", func(c *gin.Context) {
-			postID := c.Param("id")
+		postRouter.GET("/:post_id", func(c *gin.Context) {
+			postID := c.Param("post_id")
 			if postID == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid post ID"})
 				return
@@ -77,7 +78,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			var post models.Post
 			err := row.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName)
 			if err != nil {
-				if err.Error() == "no rows in result set" {
+				if err == pgx.ErrNoRows {
 					c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
 					return
 				}
@@ -89,31 +90,10 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, post)
 		})
 
-		postRouter.DELETE("/:id", func(c *gin.Context) {
-			postID := c.Param("id")
-			if postID == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid post ID"})
-				return
-			}
+		postRouter.DELETE("/:post_id", r.middleware.RequirePostOwnership("post_id"), func(c *gin.Context) {
+			postID := c.Param("post_id")
 
-			// Check if the post exists and check if the user is the author
-			var authorID int
-			err := r.pgClient.QueryRow(c.Request.Context(), "SELECT creator_id FROM posts WHERE id = $1", postID).Scan(&authorID)
-			if err != nil {
-				if err.Error() == "no rows in result set" {
-					c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
-					return
-				}
-				utils.LogError(c, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-				return
-			}
-			if authorID != c.GetInt("user_id") {
-				c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to delete this post"})
-				return
-			}
-
-			_, err = r.pgClient.Exec(c.Request.Context(), "DELETE FROM posts WHERE id = $1", postID)
+			_, err := r.pgClient.Exec(c.Request.Context(), "DELETE FROM posts WHERE id = $1", postID)
 			if err != nil {
 				utils.LogError(c, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
@@ -123,12 +103,8 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, gin.H{})
 		})
 
-		postRouter.PUT("/:id", func(c *gin.Context) {
-			postID := c.Param("id")
-			if postID == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid post ID"})
-				return
-			}
+		postRouter.PUT("/:post_id", r.middleware.RequirePostOwnership("post_id"), func(c *gin.Context) {
+			postID := c.Param("post_id")
 
 			var req models.UpdatePostRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -136,29 +112,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 				return
 			}
 
-			// Check if the post exists and check if the user is the author
-			var authorID int
-			err := r.pgClient.QueryRow(c.Request.Context(), "SELECT creator_id FROM posts WHERE id = $1", postID).Scan(&authorID)
-			if err != nil {
-				if err.Error() == "no rows in result set" {
-					c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
-					return
-				}
-				utils.LogError(c, err)
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-				return
-			}
-			if authorID != c.GetInt("user_id") {
-				if userID, exists := c.Get("user_id"); exists {
-					println("authorID: ", authorID, "userID: ", userID)
-				} else {
-					println("authorID: ", authorID, "userID: not found")
-				}
-				c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this post"})
-				return
-			}
-
-			_, err = r.pgClient.Exec(c.Request.Context(),
+			_, err := r.pgClient.Exec(c.Request.Context(),
 				"UPDATE posts SET description = $1 WHERE id = $2",
 				req.Description, postID)
 			if err != nil {

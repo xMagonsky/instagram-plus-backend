@@ -52,6 +52,7 @@ func main() {
 	routesManager := routes.NewRoutesManager(pgClient, redisClient, middlewareManager)
 	routesManager.RegisterAuthRoutes(r)
 	routesManager.RegisterPostsRoutes(r)
+	routesManager.RegisterUserRoutes(r)
 
 	r.Run(":5069")
 }
