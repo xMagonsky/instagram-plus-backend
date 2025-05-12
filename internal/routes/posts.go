@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"instagramplusbackend/internal/models"
@@ -45,14 +46,22 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 
 		postRouter.POST("/", func(c *gin.Context) {
 			var req models.AddPostRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
+			data := c.Request.FormValue("data")
+			if err := json.Unmarshal([]byte(data), &req); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 				return
 			}
 
-			_, err := r.pgClient.Exec(c.Request.Context(),
+			imageURL, err := utils.UploadPostImage(c)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "failed to retrieve image"})
+				return
+			}
+
+			_, err = r.pgClient.Exec(c.Request.Context(),
 				"INSERT INTO posts (image_url, description, creator_id) VALUES ($1, $2, $3)",
-				req.ImageURL, req.Description, c.GetInt("user_id"))
+				imageURL, req.Description, c.GetInt("user_id"))
 			if err != nil {
 				utils.LogError(c, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})

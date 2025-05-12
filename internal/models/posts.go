@@ -12,7 +12,6 @@ type Post struct {
 }
 
 type AddPostRequest struct {
-	ImageURL    string `json:"image_url" binding:"required"`
 	Description string `json:"description" binding:"required"`
 }
 
