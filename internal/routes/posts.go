@@ -55,7 +55,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			imageURL, err := utils.UploadPostImage(c)
 			if err != nil {
 				utils.LogError(c, err)
-				c.JSON(http.StatusBadRequest, gin.H{"error": "failed to retrieve image"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "failed to upload image"})
 				return
 			}
 
@@ -112,7 +112,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, gin.H{})
 		})
 
-		postRouter.PUT("/:post_id", r.middleware.RequirePostOwnership("post_id"), func(c *gin.Context) {
+		postRouter.PATCH("/:post_id", r.middleware.RequirePostOwnership("post_id"), func(c *gin.Context) {
 			postID := c.Param("post_id")
 
 			var req models.UpdatePostRequest

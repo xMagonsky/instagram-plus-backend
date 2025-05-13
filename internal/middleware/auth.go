@@ -40,7 +40,7 @@ func (m *MiddlewareManager) RequireUserOwnership(userParam string) gin.HandlerFu
 	return func(c *gin.Context) {
 		paramUserID := c.Param(userParam)
 		if paramUserID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "user id is required"})
 			c.Abort()
 			return
 		}
@@ -53,13 +53,13 @@ func (m *MiddlewareManager) RequireUserOwnership(userParam string) gin.HandlerFu
 
 		paramUserIDInt, err := strconv.Atoi(paramUserID)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
 			c.Abort()
 			return
 		}
 
 		if userID.(int) != paramUserIDInt {
-			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			c.JSON(http.StatusForbidden, gin.H{"error": "you are not allowed to access this resource"})
 			c.Abort()
 			return
 		}

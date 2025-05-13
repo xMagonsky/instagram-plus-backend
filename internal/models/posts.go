@@ -12,9 +12,9 @@ type Post struct {
 }
 
 type AddPostRequest struct {
-	Description string `json:"description" binding:"required"`
+	Description string `json:"description" binding:"required,max=255"`
 }
 
 type UpdatePostRequest struct {
-	Description string `json:"description" binding:"required"`
+	Description string `json:"description" binding:"required,max=255"`
 }

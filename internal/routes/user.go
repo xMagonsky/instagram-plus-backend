@@ -10,10 +10,10 @@ import (
 )
 
 func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
-	userRouter := router.Group("/profile")
-	userRouter.Use(r.middleware.RequireAuth())
+	profileRouter := router.Group("/profile")
+	profileRouter.Use(r.middleware.RequireAuth())
 	{
-		userRouter.GET("/:id", func(c *gin.Context) {
+		profileRouter.GET("/:id", func(c *gin.Context) {
 			userID := c.Param("id")
 			if userID == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "user ID is required"})
@@ -40,12 +40,8 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, user)
 		})
 
-		userRouter.PUT("/:id", r.middleware.RequireUserOwnership("id"), func(c *gin.Context) {
+		profileRouter.PATCH("/:id", r.middleware.RequireUserOwnership("id"), func(c *gin.Context) {
 			userID := c.Param("id")
-			if userID == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "user ID is required"})
-				return
-			}
 
 			var req models.UpdateProfileRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -73,5 +69,87 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 
 			c.JSON(http.StatusOK, gin.H{})
 		})
+
+		profileImgRouter := profileRouter.Group("/image")
+		profileImgRouter.Use(r.middleware.RequireUserOwnership("user_id"))
+		{
+			profileImgRouter.PATCH("/:user_id", func(c *gin.Context) {
+				var oldImagePath string
+				err := r.pgClient.QueryRow(c.Request.Context(), `
+					SELECT profile_image_url FROM user_profiles
+					WHERE user_id = $1`, c.Param("user_id")).Scan(&oldImagePath)
+				if err != nil {
+					if err == pgx.ErrNoRows {
+						c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+						return
+					}
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error1"})
+					return
+
+				}
+
+				if oldImagePath != "" {
+					if err = utils.RemoveProfileImage(oldImagePath); err != nil {
+						utils.LogError(c, err)
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove old image"})
+						return
+					}
+				}
+
+				imageURL, err := utils.UploadProfileImage(c)
+				if err != nil {
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload image"})
+					return
+				}
+
+				_, err = r.pgClient.Exec(c.Request.Context(), `
+					UPDATE user_profiles 
+					SET profile_image_url = $1
+					WHERE user_id = $2`, imageURL, c.Param("user_id"))
+				if err != nil {
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error2"})
+					return
+				}
+
+				c.JSON(http.StatusOK, gin.H{"image_url": imageURL})
+			})
+
+			profileImgRouter.DELETE("/:user_id", func(c *gin.Context) {
+				var oldImagePath string
+				err := r.pgClient.QueryRow(c.Request.Context(), `
+					SELECT profile_image_url FROM user_profiles
+					WHERE user_id = $1`, c.Param("user_id")).Scan(&oldImagePath)
+				if err != nil {
+					if err == pgx.ErrNoRows {
+						c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+						return
+					}
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+
+				if err = utils.RemoveProfileImage(oldImagePath); err != nil {
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove old image"})
+					return
+				}
+
+				_, err = r.pgClient.Exec(c.Request.Context(), `
+					UPDATE user_profiles 
+					SET profile_image_url = NULL
+					WHERE user_id = $1`, c.Param("user_id"))
+				if err != nil {
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+
+				c.JSON(http.StatusOK, gin.H{})
+			})
+		}
 	}
 }
