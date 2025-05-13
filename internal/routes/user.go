@@ -132,20 +132,22 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 					return
 				}
 
-				if err = utils.RemoveProfileImage(oldImagePath); err != nil {
-					utils.LogError(c, err)
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove old image"})
-					return
-				}
+				if oldImagePath != "" {
+					if err = utils.RemoveProfileImage(oldImagePath); err != nil {
+						utils.LogError(c, err)
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove old image"})
+						return
+					}
 
-				_, err = r.pgClient.Exec(c.Request.Context(), `
+					_, err = r.pgClient.Exec(c.Request.Context(), `
 					UPDATE user_profiles 
-					SET profile_image_url = NULL
+					SET profile_image_url = ''
 					WHERE user_id = $1`, c.Param("user_id"))
-				if err != nil {
-					utils.LogError(c, err)
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
-					return
+					if err != nil {
+						utils.LogError(c, err)
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+						return
+					}
 				}
 
 				c.JSON(http.StatusOK, gin.H{})
