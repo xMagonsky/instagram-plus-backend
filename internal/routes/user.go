@@ -4,6 +4,7 @@ import (
 	"instagramplusbackend/internal/models"
 	"instagramplusbackend/internal/utils"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -92,8 +93,8 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 				if oldImagePath != "" {
 					if err = utils.RemoveProfileImage(oldImagePath); err != nil {
 						utils.LogError(c, err)
-						c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove old image"})
-						return
+						//c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove old image"})
+						//return
 					}
 				}
 
@@ -152,9 +153,46 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 
 				c.JSON(http.StatusOK, gin.H{})
 			})
-		}
 
-		profileRouter.POST("/follow/:id", func(c *gin.Context) {
-		})
+			profileRouter.POST("/:id/follow", func(c *gin.Context) {
+				toFollowID, err := strconv.Atoi(c.Param("id"))
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+					return
+				}
+
+				userThatFollowsID, exists := c.Get("user_id")
+				if !exists {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+					return
+				}
+				println(userThatFollowsID)
+
+				if toFollowID == 0 || userThatFollowsID == 0 {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "user id is required"})
+					return
+				}
+
+				if toFollowID == userThatFollowsID {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "you cannot follow yourself"})
+					return
+				}
+
+				_, err = r.pgClient.Exec(c.Request.Context(), `
+					INSERT INTO follows (profile_id, follower_id) 
+					VALUES ($1, $2)`, toFollowID, userThatFollowsID)
+				if err != nil {
+					if err == pgx.ErrNoRows {
+						c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+						return
+					}
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+
+				c.JSON(http.StatusOK, gin.H{})
+			})
+		}
 	}
 }
