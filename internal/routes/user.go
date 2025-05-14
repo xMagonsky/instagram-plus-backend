@@ -153,5 +153,8 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 				c.JSON(http.StatusOK, gin.H{})
 			})
 		}
+
+		profileRouter.POST("/follow/:id", func(c *gin.Context) {
+		})
 	}
 }
