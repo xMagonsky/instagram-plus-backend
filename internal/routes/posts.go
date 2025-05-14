@@ -20,7 +20,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 
 			rows, err := r.pgClient.Query(c.Request.Context(), `
 				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
-					   (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes_count
+					   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
 				ORDER BY p.creation_timestamp DESC`)
@@ -82,7 +82,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 
 			row := r.pgClient.QueryRow(c.Request.Context(), `
 				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
-					(SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes_count
+					(SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
 				WHERE p.id = $1`, postID)
@@ -150,7 +150,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			}
 
 			_, err = r.pgClient.Exec(c.Request.Context(),
-				"INSERT INTO likes (post_id, user_id) VALUES ($1, $2)",
+				"INSERT INTO posts_likes (post_id, user_id) VALUES ($1, $2)",
 				postID, likerID)
 			if err != nil {
 				if utils.IsDuplicatePgxError(err) {
@@ -179,7 +179,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			}
 
 			_, err = r.pgClient.Exec(c.Request.Context(),
-				"DELETE FROM likes WHERE post_id = $1 AND user_id = $2",
+				"DELETE FROM posts_likes WHERE post_id = $1 AND user_id = $2",
 				postID, unlikerID)
 			if err != nil {
 				utils.LogError(c, err)
