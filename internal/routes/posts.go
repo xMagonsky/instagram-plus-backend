@@ -3,6 +3,7 @@ package routes
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"instagramplusbackend/internal/models"
 	"instagramplusbackend/internal/utils"
@@ -18,10 +19,11 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 		postRouter.GET("", func(c *gin.Context) {
 
 			rows, err := r.pgClient.Query(c.Request.Context(), `
-				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username
+				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
+					   (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes_count
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
-				ORDER BY p.creation_timestamp ASC`)
+				ORDER BY p.creation_timestamp DESC`)
 			if err != nil {
 				utils.LogError(c, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
@@ -32,7 +34,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			posts := []models.Post{}
 			for rows.Next() {
 				var post models.Post
-				err := rows.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName)
+				err := rows.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.LikesCount)
 				if err != nil {
 					utils.LogError(c, err)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
@@ -79,13 +81,14 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			}
 
 			row := r.pgClient.QueryRow(c.Request.Context(), `
-				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username
+				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
+					(SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes_count
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
 				WHERE p.id = $1`, postID)
 
 			var post models.Post
-			err := row.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName)
+			err := row.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.LikesCount)
 			if err != nil {
 				if err == pgx.ErrNoRows {
 					c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
@@ -124,6 +127,60 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			_, err := r.pgClient.Exec(c.Request.Context(),
 				"UPDATE posts SET description = $1 WHERE id = $2",
 				req.Description, postID)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{})
+		})
+
+		postRouter.POST("/:post_id/like", func(c *gin.Context) {
+			postID, err := strconv.Atoi(c.Param("post_id"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid post id"})
+				return
+			}
+
+			likerID, exists := c.Get("user_id")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+				return
+			}
+
+			_, err = r.pgClient.Exec(c.Request.Context(),
+				"INSERT INTO likes (post_id, user_id) VALUES ($1, $2)",
+				postID, likerID)
+			if err != nil {
+				if utils.IsDuplicatePgxError(err) {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "you already liked this post"})
+					return
+				}
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{})
+		})
+
+		postRouter.DELETE("/:post_id/like", func(c *gin.Context) {
+			postID, err := strconv.Atoi(c.Param("post_id"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid post id"})
+				return
+			}
+
+			unlikerID, exists := c.Get("user_id")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+				return
+			}
+
+			_, err = r.pgClient.Exec(c.Request.Context(),
+				"DELETE FROM likes WHERE post_id = $1 AND user_id = $2",
+				postID, unlikerID)
 			if err != nil {
 				utils.LogError(c, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
