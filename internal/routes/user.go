@@ -186,6 +186,49 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 						c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 						return
 					}
+					if utils.IsDuplicatePgxError(err) {
+						c.JSON(http.StatusBadRequest, gin.H{"error": "you are already following this user"})
+						return
+					}
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+
+				c.JSON(http.StatusOK, gin.H{})
+			})
+
+			profileRouter.DELETE("/:id/follow", func(c *gin.Context) {
+				toUnfollowID, err := strconv.Atoi(c.Param("id"))
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+					return
+				}
+
+				userThatUnfollowsID, exists := c.Get("user_id")
+				if !exists {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+					return
+				}
+
+				if toUnfollowID == 0 || userThatUnfollowsID == 0 {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "user id is required"})
+					return
+				}
+
+				if toUnfollowID == userThatUnfollowsID {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "you cannot unfollow yourself"})
+					return
+				}
+
+				_, err = r.pgClient.Exec(c.Request.Context(), `
+					DELETE FROM follows 
+					WHERE profile_id = $1 AND follower_id = $2`, toUnfollowID, userThatUnfollowsID)
+				if err != nil {
+					if err == pgx.ErrNoRows {
+						c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+						return
+					}
 					utils.LogError(c, err)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
 					return
