@@ -11,6 +11,8 @@ type Profile struct {
 	Gender            string    `json:"gender"`
 	BirthDate         time.Time `json:"birth_date"`
 	CreationTimestamp time.Time `json:"creation_timestamp"`
+	FollowersCount    int       `json:"followers_count"`
+	FollowingCount    int       `json:"following_count"`
 }
 
 type UpdateProfileRequest struct {

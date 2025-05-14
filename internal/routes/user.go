@@ -38,6 +38,27 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 				return
 			}
 
+			// Get followers and following count
+			var followersCount, followingCount int
+			err = r.pgClient.QueryRow(c.Request.Context(), `
+				SELECT COUNT(*) FROM follows WHERE profile_id = $1`, userID).Scan(&followersCount)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+				return
+			}
+
+			err = r.pgClient.QueryRow(c.Request.Context(), `
+				SELECT COUNT(*) FROM follows WHERE follower_id = $1`, userID).Scan(&followingCount)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+				return
+			}
+
+			user.FollowersCount = followersCount
+			user.FollowingCount = followingCount
+
 			c.JSON(http.StatusOK, user)
 		})
 
