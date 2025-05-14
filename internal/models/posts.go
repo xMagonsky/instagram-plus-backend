@@ -10,6 +10,7 @@ type Post struct {
 	CreationTimestamp time.Time `json:"create_timestamp"`
 	AuthorName        string    `json:"author_name"`
 	LikesCount        int       `json:"likes_count"`
+	AlreadyLiked      bool      `json:"already_liked"`
 }
 
 type AddPostRequest struct {

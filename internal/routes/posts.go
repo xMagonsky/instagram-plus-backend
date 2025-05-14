@@ -17,13 +17,19 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 	postRouter.Use(r.middleware.RequireAuth())
 	{
 		postRouter.GET("", func(c *gin.Context) {
+			userID, exists := c.Get("user_id")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+				return
+			}
 
 			rows, err := r.pgClient.Query(c.Request.Context(), `
 				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
-					   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count
+					   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count,
+					   EXISTS (SELECT 1 FROM posts_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS user_liked
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
-				ORDER BY p.creation_timestamp DESC`)
+				ORDER BY p.creation_timestamp DESC`, userID)
 			if err != nil {
 				utils.LogError(c, err)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
@@ -34,7 +40,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			posts := []models.Post{}
 			for rows.Next() {
 				var post models.Post
-				err := rows.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.LikesCount)
+				err := rows.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.LikesCount, &post.AlreadyLiked)
 				if err != nil {
 					utils.LogError(c, err)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
