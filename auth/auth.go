@@ -71,30 +71,30 @@ func (a *AuthModule) Register(ctx context.Context, username, password string, em
 	return userID, token, nil
 }
 
-func (a *AuthModule) Login(ctx context.Context, username, password string) (string, error) {
+func (a *AuthModule) Login(ctx context.Context, username, password string) (int, string, error) {
 	var userID int
 	var passwordHash string
 	err := a.db.QueryRow(ctx, "SELECT id, password FROM users WHERE username = $1", username).Scan(&userID, &passwordHash)
 	if err != nil {
-		return "", errors.New("invalid credentials")
+		return 0, "", errors.New("invalid credentials")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)); err != nil {
-		return "", errors.New("invalid credentials")
+		return 0, "", errors.New("invalid credentials")
 	}
 
 	token, err := generateSecureToken(32)
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 
 	key := "session:" + token
 	err = a.redis.Set(ctx, key, userID, 24*time.Hour).Err()
 	if err != nil {
-		return "", err
+		return 0, "", err
 	}
 
-	return token, nil
+	return userID, token, nil
 }
 
 func (a *AuthModule) ValidateToken(ctx context.Context, token string) (string, error) {

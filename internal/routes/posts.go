@@ -108,6 +108,50 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, post)
 		})
 
+		postRouter.GET("/user/:username", func(c *gin.Context) {
+			username := c.Param("username")
+			if username == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "username is required"})
+				return
+			}
+
+			rows, err := r.pgClient.Query(c.Request.Context(), `
+				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
+					   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count,
+					   EXISTS (SELECT 1 FROM posts_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS user_liked
+				FROM posts p
+				JOIN users u ON p.creator_id = u.id
+				WHERE u.username = $2
+				ORDER BY p.creation_timestamp DESC`, c.GetInt("user_id"), username)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+				return
+			}
+			defer rows.Close()
+			posts := []models.Post{}
+			for rows.Next() {
+				var post models.Post
+				err := rows.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.LikesCount, &post.AlreadyLiked)
+				if err != nil {
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+				posts = append(posts, post)
+			}
+			if err := rows.Err(); err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+				return
+			}
+			if len(posts) == 0 {
+				c.JSON(http.StatusNotFound, gin.H{"error": "no posts found"})
+				return
+			}
+			c.JSON(http.StatusOK, posts)
+		})
+
 		postRouter.DELETE("/:post_id", r.middleware.RequirePostOwnership("post_id"), func(c *gin.Context) {
 			postID := c.Param("post_id")
 

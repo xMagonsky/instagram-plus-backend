@@ -38,7 +38,7 @@ func (r *RoutesManager) RegisterAuthRoutes(router *gin.Engine) {
 
 			c.SetCookie("AUTH", token, 0, "/", "", false, true)
 
-			c.JSON(http.StatusOK, gin.H{"username": req.Username})
+			c.JSON(http.StatusOK, gin.H{"username": req.Username, "user_id": userID})
 		})
 
 		authRouter.POST("/login", func(c *gin.Context) {
@@ -48,7 +48,7 @@ func (r *RoutesManager) RegisterAuthRoutes(router *gin.Engine) {
 				return
 			}
 
-			token, err := r.auth.Login(c.Request.Context(), req.Username, req.Password)
+			userID, token, err := r.auth.Login(c.Request.Context(), req.Username, req.Password)
 			if err != nil {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 				return
@@ -56,7 +56,7 @@ func (r *RoutesManager) RegisterAuthRoutes(router *gin.Engine) {
 
 			c.SetCookie("AUTH", token, 0, "/", "", false, true)
 
-			c.JSON(http.StatusOK, gin.H{"username": req.Username})
+			c.JSON(http.StatusOK, gin.H{"username": req.Username, "user_id": userID})
 		})
 
 		authRouter.POST("/validate", func(c *gin.Context) {
