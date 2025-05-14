@@ -15,7 +15,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 	postRouter := router.Group("/posts")
 	postRouter.Use(r.middleware.RequireAuth())
 	{
-		postRouter.GET("/", func(c *gin.Context) {
+		postRouter.GET("", func(c *gin.Context) {
 
 			rows, err := r.pgClient.Query(c.Request.Context(), `
 				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username
@@ -44,7 +44,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, posts)
 		})
 
-		postRouter.POST("/", func(c *gin.Context) {
+		postRouter.POST("", func(c *gin.Context) {
 			var req models.AddPostRequest
 			data := c.Request.FormValue("data")
 			if err := json.Unmarshal([]byte(data), &req); err != nil {
