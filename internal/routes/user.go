@@ -14,20 +14,21 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 	profileRouter := router.Group("/profile")
 	profileRouter.Use(r.middleware.RequireAuth())
 	{
-		profileRouter.GET("/:id", func(c *gin.Context) {
-			userID := c.Param("id")
-			if userID == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "user ID is required"})
+		profileRouter.GET("/:username", func(c *gin.Context) {
+			username := c.Param("username")
+			if username == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "username is required"})
 				return
 			}
 
+			var userID int
 			var user models.Profile
 			err := r.pgClient.QueryRow(c.Request.Context(), `
-				SELECT u.username, p.name, p.surname, p.description, p.profile_image_url, p.gender, p.birth, u.creation_timestamp
+				SELECT u.id, u.username, p.name, p.surname, p.description, p.profile_image_url, p.gender, p.birth, u.creation_timestamp
 				FROM users u
 				JOIN user_profiles p ON u.id = p.user_id
-				WHERE u.id = $1`, userID).Scan(
-				&user.Username, &user.Name, &user.Surname, &user.Description, &user.ProfileImageURL, &user.Gender, &user.BirthDate, &user.CreationTimestamp)
+				WHERE u.username = $1`, username).Scan(
+				&userID, &user.Username, &user.Name, &user.Surname, &user.Description, &user.ProfileImageURL, &user.Gender, &user.BirthDate, &user.CreationTimestamp)
 			if err != nil {
 				if err == pgx.ErrNoRows {
 					c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
