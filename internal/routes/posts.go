@@ -24,11 +24,12 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			}
 
 			rows, err := r.pgClient.Query(c.Request.Context(), `
-				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
-					   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count,
-					   EXISTS (SELECT 1 FROM posts_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS user_liked
+				SELECT p.id, u.username, p.image_url, p.description, p.creation_timestamp, up.name, up.surname, up.profile_image_url,
+				   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count,
+				   EXISTS (SELECT 1 FROM posts_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS user_liked
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
+				JOIN user_profiles up ON up.user_id = u.id
 				ORDER BY p.creation_timestamp DESC`, userID)
 			if err != nil {
 				utils.LogError(c, err)
@@ -40,7 +41,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			posts := []models.Post{}
 			for rows.Next() {
 				var post models.Post
-				err := rows.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.LikesCount, &post.AlreadyLiked)
+				err := rows.Scan(&post.ID, &post.AuthorUsername, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.AuthorSurname, &post.AuthorProfileImageURL, &post.LikesCount, &post.AlreadyLiked)
 				if err != nil {
 					utils.LogError(c, err)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
@@ -87,14 +88,16 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			}
 
 			row := r.pgClient.QueryRow(c.Request.Context(), `
-				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
-					(SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count
+				SELECT p.id, u.username, p.image_url, p.description, p.creation_timestamp, up.name, up.surname, up.profile_image_url,
+					(SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count,
+					EXISTS (SELECT 1 FROM posts_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS user_liked
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
-				WHERE p.id = $1`, postID)
+				JOIN user_profiles up ON up.user_id = u.id
+				WHERE p.id = $2`, c.GetInt("user_id"), postID)
 
 			var post models.Post
-			err := row.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.LikesCount)
+			err := row.Scan(&post.ID, &post.AuthorUsername, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.AuthorSurname, &post.AuthorProfileImageURL, &post.LikesCount, &post.AlreadyLiked)
 			if err != nil {
 				if err == pgx.ErrNoRows {
 					c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
@@ -116,11 +119,12 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			}
 
 			rows, err := r.pgClient.Query(c.Request.Context(), `
-				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
-					   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count,
-					   EXISTS (SELECT 1 FROM posts_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS user_liked
+				SELECT p.id, u.username, p.image_url, p.description, p.creation_timestamp, up.name, up.surname, up.profile_image_url,
+				   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count,
+				   EXISTS (SELECT 1 FROM posts_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS user_liked
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
+				JOIN user_profiles up ON up.user_id = u.id
 				WHERE u.username = $2
 				ORDER BY p.creation_timestamp DESC`, c.GetInt("user_id"), username)
 			if err != nil {
@@ -132,7 +136,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			posts := []models.Post{}
 			for rows.Next() {
 				var post models.Post
-				err := rows.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.LikesCount, &post.AlreadyLiked)
+				err := rows.Scan(&post.ID, &post.AuthorUsername, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.AuthorSurname, &post.AuthorProfileImageURL, &post.LikesCount, &post.AlreadyLiked)
 				if err != nil {
 					utils.LogError(c, err)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
@@ -160,11 +164,12 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			}
 
 			rows, err := r.pgClient.Query(c.Request.Context(), `
-				SELECT p.id, p.creator_id, p.image_url, p.description, p.creation_timestamp, u.username,
-					   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count,
-					   EXISTS (SELECT 1 FROM posts_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS user_liked
+				SELECT p.id, u.username, p.image_url, p.description, p.creation_timestamp, up.name, up.surname, up.profile_image_url,
+				   (SELECT COUNT(*) FROM posts_likes l WHERE l.post_id = p.id) AS likes_count,
+				   EXISTS (SELECT 1 FROM posts_likes l WHERE l.post_id = p.id AND l.user_id = $1) AS user_liked
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
+				JOIN user_profiles up ON up.user_id = u.id
 				JOIN follows f ON f.profile_id = p.creator_id
 				WHERE f.follower_id = $1
 				ORDER BY p.creation_timestamp DESC`, userID)
@@ -178,7 +183,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 			posts := []models.Post{}
 			for rows.Next() {
 				var post models.Post
-				err := rows.Scan(&post.ID, &post.AuthorID, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.LikesCount, &post.AlreadyLiked)
+				err := rows.Scan(&post.ID, &post.AuthorUsername, &post.ImageURL, &post.Description, &post.CreationTimestamp, &post.AuthorName, &post.AuthorSurname, &post.AuthorProfileImageURL, &post.LikesCount, &post.AlreadyLiked)
 				if err != nil {
 					utils.LogError(c, err)
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
