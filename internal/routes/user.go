@@ -175,6 +175,21 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 				user.FollowersCount = followersCount
 				user.FollowingCount = followingCount
 
+				currentUserID, exists := c.Get("user_id")
+				alreadyFollowed := false
+				if exists {
+					err = r.pgClient.QueryRow(c.Request.Context(), `
+						SELECT EXISTS(SELECT 1 FROM follows WHERE profile_id = $1 AND follower_id = $2)
+					`, userID, currentUserID).Scan(&alreadyFollowed)
+					if err != nil {
+						utils.LogError(c, err)
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+						return
+					}
+				}
+
+				user.AlreadyFollowed = alreadyFollowed
+
 				c.JSON(http.StatusOK, user)
 			})
 
