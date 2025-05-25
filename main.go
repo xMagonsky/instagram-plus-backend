@@ -54,6 +54,7 @@ func main() {
 	routesManager.RegisterAuthRoutes(r)
 	routesManager.RegisterPostsRoutes(r)
 	routesManager.RegisterUserRoutes(r)
+	routesManager.RegisterCommentsRoutes(r)
 
 	r.Run(":5069")
 }

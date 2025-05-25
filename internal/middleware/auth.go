@@ -106,3 +106,42 @@ func (m *MiddlewareManager) RequirePostOwnership(postParam string) gin.HandlerFu
 		c.Next()
 	}
 }
+
+func (m *MiddlewareManager) RequireCommentOwnership(commentParam string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		paramCommentID := c.Param(commentParam)
+		if paramCommentID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid comment ID"})
+			c.Abort()
+			return
+		}
+
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
+		var authorID int
+		err := m.pgClient.QueryRow(c.Request.Context(), `SELECT author_id FROM comments WHERE id = $1`, paramCommentID).Scan(&authorID)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				c.JSON(http.StatusNotFound, gin.H{"error": "comment not found"})
+				c.Abort()
+				return
+			}
+			utils.LogError(c, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			c.Abort()
+			return
+		}
+
+		if authorID != userID.(int) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}

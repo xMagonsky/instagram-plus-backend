@@ -13,6 +13,7 @@ type Post struct {
 	LikesCount            int       `json:"likes_count"`
 	AlreadyLiked          bool      `json:"already_liked"`
 	AuthorProfileImageURL string    `json:"author_profile_image_url"`
+	CommentsCount         int       `json:"comments_count"`
 }
 
 type AddPostRequest struct {
