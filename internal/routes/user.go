@@ -175,6 +175,7 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 				user.FollowersCount = followersCount
 				user.FollowingCount = followingCount
 
+				// Get whether the current user already follows this profile
 				currentUserID, exists := c.Get("user_id")
 				alreadyFollowed := false
 				if exists {
@@ -291,6 +292,104 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 				}
 
 				c.JSON(http.StatusOK, gin.H{})
+			})
+
+			usernameProfileRouter.GET("/followers", func(c *gin.Context) {
+				username := c.Param("username")
+				if username == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "username is required"})
+					return
+				}
+
+				var userID int
+				err := r.pgClient.QueryRow(c.Request.Context(), `SELECT id FROM users WHERE username = $1`, username).Scan(&userID)
+				if err != nil {
+					if err == pgx.ErrNoRows {
+						c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+						return
+					}
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+
+				rows, err := r.pgClient.Query(c.Request.Context(), `
+					SELECT u.username, p.name, p.surname, p.profile_image_url
+					FROM follows f
+					JOIN users u ON f.follower_id = u.id
+					JOIN user_profiles p ON u.id = p.user_id
+					WHERE f.profile_id = $1`, userID)
+				if err != nil {
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+				defer rows.Close()
+
+				followers := []gin.H{}
+				for rows.Next() {
+					var username, name, surname, profileImageURL string
+					if err := rows.Scan(&username, &name, &surname, &profileImageURL); err != nil {
+						utils.LogError(c, err)
+						continue
+					}
+					followers = append(followers, gin.H{
+						"username":          username,
+						"name":              name,
+						"surname":           surname,
+						"profile_image_url": profileImageURL,
+					})
+				}
+				c.JSON(http.StatusOK, followers)
+			})
+
+			usernameProfileRouter.GET("/following", func(c *gin.Context) {
+				username := c.Param("username")
+				if username == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "username is required"})
+					return
+				}
+
+				var userID int
+				err := r.pgClient.QueryRow(c.Request.Context(), `SELECT id FROM users WHERE username = $1`, username).Scan(&userID)
+				if err != nil {
+					if err == pgx.ErrNoRows {
+						c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+						return
+					}
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+
+				rows, err := r.pgClient.Query(c.Request.Context(), `
+					SELECT u.username, p.name, p.surname, p.profile_image_url
+					FROM follows f
+					JOIN users u ON f.profile_id = u.id
+					JOIN user_profiles p ON u.id = p.user_id
+					WHERE f.follower_id = $1`, userID)
+				if err != nil {
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+				defer rows.Close()
+
+				following := []gin.H{}
+				for rows.Next() {
+					var username, name, surname, profileImageURL string
+					if err := rows.Scan(&username, &name, &surname, &profileImageURL); err != nil {
+						utils.LogError(c, err)
+						continue
+					}
+					following = append(following, gin.H{
+						"username":          username,
+						"name":              name,
+						"surname":           surname,
+						"profile_image_url": profileImageURL,
+					})
+				}
+				c.JSON(http.StatusOK, following)
 			})
 		}
 	}
