@@ -36,9 +36,17 @@ func (r *RoutesManager) RegisterAuthRoutes(router *gin.Engine) {
 				return
 			}
 
+			var isAdmin, isPremium bool
+			err = r.pgClient.QueryRow(c.Request.Context(), `SELECT is_admin, is_premium FROM users WHERE id = $1`, userID).Scan(&isAdmin, &isPremium)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user roles"})
+				return
+			}
+
 			c.SetCookie("AUTH", token, 0, "/", "", false, true)
 
-			c.JSON(http.StatusOK, gin.H{"username": req.Username, "user_id": userID})
+			c.JSON(http.StatusOK, gin.H{"username": req.Username, "user_id": userID, "is_admin": isAdmin, "is_premium": isPremium})
 		})
 
 		authRouter.POST("/login", func(c *gin.Context) {
@@ -54,9 +62,17 @@ func (r *RoutesManager) RegisterAuthRoutes(router *gin.Engine) {
 				return
 			}
 
+			var isAdmin, isPremium bool
+			err = r.pgClient.QueryRow(c.Request.Context(), `SELECT is_admin, is_premium FROM users WHERE id = $1`, userID).Scan(&isAdmin, &isPremium)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user roles"})
+				return
+			}
+
 			c.SetCookie("AUTH", token, 0, "/", "", false, true)
 
-			c.JSON(http.StatusOK, gin.H{"username": req.Username, "user_id": userID})
+			c.JSON(http.StatusOK, gin.H{"username": req.Username, "user_id": userID, "is_admin": isAdmin, "is_premium": isPremium})
 		})
 
 		authRouter.POST("/validate", func(c *gin.Context) {

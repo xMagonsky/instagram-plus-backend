@@ -145,3 +145,25 @@ func (m *MiddlewareManager) RequireCommentOwnership(commentParam string) gin.Han
 		c.Next()
 	}
 }
+
+func (m *MiddlewareManager) RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+			return
+		}
+		var isAdmin bool
+		err := m.pgClient.QueryRow(c.Request.Context(), "SELECT is_admin FROM users WHERE id = $1", userID).Scan(&isAdmin)
+		if err != nil {
+			utils.LogError(c, err)
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+			return
+		}
+		if !isAdmin {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin only"})
+			return
+		}
+		c.Next()
+	}
+}

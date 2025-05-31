@@ -20,10 +20,16 @@ func IsDuplicatePgxError(err error) bool {
 	return false
 }
 
-func IsForeignKeyViolationPgxError(err error, constraint string) bool {
+func IsForeignKeyViolationPgxError(err error, constraint ...string) bool {
 	var pgErr *pgconn.PgError
 	if err != nil && errors.As(err, &pgErr) {
-		return pgErr.Code == "23503" && pgErr.ConstraintName == constraint
+		if pgErr.Code != "23503" { // foreign_key_violation
+			return false
+		}
+		if len(constraint) == 0 {
+			return true
+		}
+		return pgErr.ConstraintName == constraint[0]
 	}
 	return false
 }
