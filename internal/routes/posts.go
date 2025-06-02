@@ -31,6 +31,7 @@ func (r *RoutesManager) RegisterPostsRoutes(router *gin.Engine) {
 				FROM posts p
 				JOIN users u ON p.creator_id = u.id
 				JOIN user_profiles up ON up.user_id = u.id
+				WHERE p.creator_id != $1
 				ORDER BY p.creation_timestamp DESC`, userID)
 			if err != nil {
 				utils.LogError(c, err)
