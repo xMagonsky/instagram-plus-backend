@@ -78,5 +78,29 @@ func (r *RoutesManager) RegisterAccountRoutes(router *gin.Engine) {
 			}
 			c.JSON(http.StatusOK, gin.H{"message": "Email changed successfully"})
 		})
+
+		// Set premium status endpoint
+		accountRouter.POST("/getpremium/:user_id", r.middleware.RequireUserOwnership("user_id"), func(c *gin.Context) {
+			userID := c.Param("user_id")
+			_, err := r.pgClient.Exec(c.Request.Context(), `UPDATE users SET is_premium = TRUE WHERE id = $1`, userID)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "Premium enabled"})
+		})
+
+		// Remove premium status endpoint
+		accountRouter.DELETE("/getpremium/:user_id", r.middleware.RequireUserOwnership("user_id"), func(c *gin.Context) {
+			userID := c.Param("user_id")
+			_, err := r.pgClient.Exec(c.Request.Context(), `UPDATE users SET is_premium = FALSE WHERE id = $1`, userID)
+			if err != nil {
+				utils.LogError(c, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "Premium disabled"})
+		})
 	}
 }
