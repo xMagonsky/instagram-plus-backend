@@ -127,6 +127,41 @@ func (a *AuthModule) Logout(ctx context.Context, token string) error {
 	return a.redis.Del(ctx, key).Err()
 }
 
+// ChangePassword changes the user's password after verifying the old password
+func (a *AuthModule) ChangePassword(ctx context.Context, userID int, oldPassword, newPassword string) error {
+	var passwordHash string
+	err := a.db.QueryRow(ctx, "SELECT password FROM users WHERE id = $1", userID).Scan(&passwordHash)
+	if err != nil {
+		return errors.New("user not found")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(oldPassword)); err != nil {
+		return errors.New("invalid old password")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	_, err = a.db.Exec(ctx, "UPDATE users SET password = $1 WHERE id = $2", string(hashedPassword), userID)
+	return err
+}
+
+// ChangeEmail changes the user's email after verifying the password
+func (a *AuthModule) ChangeEmail(ctx context.Context, userID int, password, newEmail string) error {
+	var passwordHash string
+	err := a.db.QueryRow(ctx, "SELECT password FROM users WHERE id = $1", userID).Scan(&passwordHash)
+	if err != nil {
+		return errors.New("user not found")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)); err != nil {
+		return errors.New("invalid password")
+	}
+
+	_, err = a.db.Exec(ctx, "UPDATE users SET email = $1 WHERE id = $2", newEmail, userID)
+	return err
+}
+
 //
 // TOKEN SIGNING FOR HASHED TOKENS IN REDIS
 //

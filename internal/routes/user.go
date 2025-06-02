@@ -2,6 +2,7 @@ package routes
 
 import (
 	"net/http"
+	"strconv"
 
 	"instagramplusbackend/internal/utils"
 
@@ -35,8 +36,47 @@ func (r *RoutesManager) RegisterAccountRoutes(router *gin.Engine) {
 				return
 			}
 
-			c.SetCookie("AUTH", "", -1, "/", "", false, true)
 			c.JSON(http.StatusOK, gin.H{"message": "Account removed successfully"})
+		})
+
+		// Change password endpoint
+		accountRouter.POST("/change-password/:user_id", r.middleware.RequireUserOwnership("user_id"), func(c *gin.Context) {
+			userID := c.Param("user_id")
+			var req struct {
+				OldPassword string `json:"old_password" binding:"required"`
+				NewPassword string `json:"new_password" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+				return
+			}
+			userIDInt, _ := strconv.Atoi(userID)
+			err := r.auth.ChangePassword(c.Request.Context(), userIDInt, req.OldPassword, req.NewPassword)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "Password changed successfully"})
+		})
+
+		// Change email endpoint
+		accountRouter.POST("/change-email/:user_id", r.middleware.RequireUserOwnership("user_id"), func(c *gin.Context) {
+			userID := c.Param("user_id")
+			var req struct {
+				Password string `json:"password" binding:"required"`
+				NewEmail string `json:"new_email" binding:"required,email"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+				return
+			}
+			userIDInt, _ := strconv.Atoi(userID)
+			err := r.auth.ChangeEmail(c.Request.Context(), userIDInt, req.Password, req.NewEmail)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "Email changed successfully"})
 		})
 	}
 }
