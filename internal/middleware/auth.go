@@ -36,8 +36,27 @@ func (m *MiddlewareManager) RequireAuth() gin.HandlerFunc {
 	}
 }
 
+func (m *MiddlewareManager) isUserAdmin(c *gin.Context) (bool, error) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		return false, nil
+	}
+	var isAdmin bool
+	err := m.pgClient.QueryRow(c.Request.Context(), "SELECT is_admin FROM users WHERE id = $1", userID).Scan(&isAdmin)
+	if err != nil {
+		return false, err
+	}
+	return isAdmin, nil
+}
+
 func (m *MiddlewareManager) RequireUserOwnership(userParam string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
 		paramUserID := c.Param(userParam)
 		if paramUserID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "user id is required"})
@@ -45,9 +64,9 @@ func (m *MiddlewareManager) RequireUserOwnership(userParam string) gin.HandlerFu
 			return
 		}
 
-		userID, exists := c.Get("user_id")
-		if !exists {
-			c.AbortWithStatus(http.StatusUnauthorized)
+		isAdmin, err := m.isUserAdmin(c)
+		if err == nil && isAdmin {
+			c.Next()
 			return
 		}
 
@@ -70,6 +89,12 @@ func (m *MiddlewareManager) RequireUserOwnership(userParam string) gin.HandlerFu
 
 func (m *MiddlewareManager) RequirePostOwnership(postParam string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
 		paramPostID := c.Param(postParam)
 		if paramPostID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid post ID"})
@@ -77,14 +102,14 @@ func (m *MiddlewareManager) RequirePostOwnership(postParam string) gin.HandlerFu
 			return
 		}
 
-		userID, exists := c.Get("user_id")
-		if !exists {
-			c.AbortWithStatus(http.StatusUnauthorized)
+		isAdmin, err := m.isUserAdmin(c)
+		if err == nil && isAdmin {
+			c.Next()
 			return
 		}
 
 		var ownerID int
-		err := m.pgClient.QueryRow(c.Request.Context(), `SELECT creator_id FROM posts WHERE id = $1`, paramPostID).Scan(&ownerID)
+		err = m.pgClient.QueryRow(c.Request.Context(), `SELECT creator_id FROM posts WHERE id = $1`, paramPostID).Scan(&ownerID)
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				c.JSON(http.StatusNotFound, gin.H{"error": "post not found"})
@@ -109,6 +134,12 @@ func (m *MiddlewareManager) RequirePostOwnership(postParam string) gin.HandlerFu
 
 func (m *MiddlewareManager) RequireCommentOwnership(commentParam string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
 		paramCommentID := c.Param(commentParam)
 		if paramCommentID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid comment ID"})
@@ -116,14 +147,14 @@ func (m *MiddlewareManager) RequireCommentOwnership(commentParam string) gin.Han
 			return
 		}
 
-		userID, exists := c.Get("user_id")
-		if !exists {
-			c.AbortWithStatus(http.StatusUnauthorized)
+		isAdmin, err := m.isUserAdmin(c)
+		if err == nil && isAdmin {
+			c.Next()
 			return
 		}
 
 		var authorID int
-		err := m.pgClient.QueryRow(c.Request.Context(), `SELECT author_id FROM comments WHERE id = $1`, paramCommentID).Scan(&authorID)
+		err = m.pgClient.QueryRow(c.Request.Context(), `SELECT author_id FROM comments WHERE id = $1`, paramCommentID).Scan(&authorID)
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				c.JSON(http.StatusNotFound, gin.H{"error": "comment not found"})
@@ -148,13 +179,7 @@ func (m *MiddlewareManager) RequireCommentOwnership(commentParam string) gin.Han
 
 func (m *MiddlewareManager) RequireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, exists := c.Get("user_id")
-		if !exists {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-			return
-		}
-		var isAdmin bool
-		err := m.pgClient.QueryRow(c.Request.Context(), "SELECT is_admin FROM users WHERE id = $1", userID).Scan(&isAdmin)
+		isAdmin, err := m.isUserAdmin(c)
 		if err != nil {
 			utils.LogError(c, err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "database error"})
