@@ -125,6 +125,67 @@ func (r *RoutesManager) RegisterUserRoutes(router *gin.Engine) {
 
 				c.JSON(http.StatusOK, gin.H{})
 			})
+
+			userIdProfileRouter.GET("", r.middleware.RequireUserOwnership("user_id"), func(c *gin.Context) {
+				userID := c.Param("user_id")
+				if userID == "" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+					return
+				}
+
+				var user models.Profile
+				err := r.pgClient.QueryRow(c.Request.Context(), `
+					SELECT u.username, p.name, p.surname, p.description, p.profile_image_url, p.gender, p.birth, u.creation_timestamp
+					FROM users u
+					JOIN user_profiles p ON u.id = p.user_id
+					WHERE u.id = $1`, userID).Scan(
+					&user.Username, &user.Name, &user.Surname, &user.Description, &user.ProfileImageURL, &user.Gender, &user.BirthDate, &user.CreationTimestamp)
+				if err != nil {
+					if err == pgx.ErrNoRows {
+						c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+					} else {
+						utils.LogError(c, err)
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					}
+					return
+				}
+
+				// Get followers and following count
+				var followersCount, followingCount int
+				err = r.pgClient.QueryRow(c.Request.Context(), `
+					SELECT COUNT(*) FROM follows WHERE profile_id = $1`, userID).Scan(&followersCount)
+				if err != nil {
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+				err = r.pgClient.QueryRow(c.Request.Context(), `
+					SELECT COUNT(*) FROM follows WHERE follower_id = $1`, userID).Scan(&followingCount)
+				if err != nil {
+					utils.LogError(c, err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+					return
+				}
+				user.FollowersCount = followersCount
+				user.FollowingCount = followingCount
+
+				// Get whether the current user already follows this profile
+				currentUserID, exists := c.Get("user_id")
+				alreadyFollowed := false
+				if exists {
+					err = r.pgClient.QueryRow(c.Request.Context(), `
+						SELECT EXISTS(SELECT 1 FROM follows WHERE profile_id = $1 AND follower_id = $2)
+					`, userID, currentUserID).Scan(&alreadyFollowed)
+					if err != nil {
+						utils.LogError(c, err)
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "database error"})
+						return
+					}
+				}
+				user.AlreadyFollowed = alreadyFollowed
+
+				c.JSON(http.StatusOK, user)
+			})
 		}
 
 		usernameProfileRouter := profileRouter.Group("/name/:username")
