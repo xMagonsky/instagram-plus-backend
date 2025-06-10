@@ -11,10 +11,10 @@ import (
 )
 
 func (r *RoutesManager) RegisterCommentsRoutes(router *gin.Engine) {
-	commentsRouter := router.Group("/posts/:post_id/comments")
+	commentsRouter := router.Group("/comments")
 	commentsRouter.Use(r.middleware.RequireAuth())
 	{
-		commentsRouter.GET("", func(c *gin.Context) {
+		commentsRouter.GET("/post/:post_id", func(c *gin.Context) {
 			postID, err := strconv.Atoi(c.Param("post_id"))
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid post id"})
@@ -49,7 +49,7 @@ func (r *RoutesManager) RegisterCommentsRoutes(router *gin.Engine) {
 			c.JSON(http.StatusOK, comments)
 		})
 
-		commentsRouter.POST("", func(c *gin.Context) {
+		commentsRouter.POST("/post/:post_id", func(c *gin.Context) {
 			postID, err := strconv.Atoi(c.Param("post_id"))
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid post id"})
